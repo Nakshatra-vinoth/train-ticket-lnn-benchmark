@@ -162,8 +162,3 @@ Each training sample consists of:
 - Analyze latency spike prediction
 - Evaluate statistical significance across multiple random seeds
 
----
-
-## License
-
-This repository is intended for research and educational purposes.
