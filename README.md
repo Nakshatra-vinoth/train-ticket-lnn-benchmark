@@ -59,10 +59,30 @@ results/
 
 ## Status
 
-- Benchmark construction complete
-- LSTM complete
-- GRU complete
-- XGBoost complete
-- CfC complete
-- LTC in progress
+## Current Results
+
+| Model | MAE (ms) | Pearson Correlation | Status |
+|------|---------:|--------------------:|--------|
+| Naive Mean | 22.42 | – | Complete |
+| XGBoost | 21.23 | 0.19 | Complete |
+| LSTM | 19.49 | 0.35 | Complete |
+| GRU | 18.22 | 0.45 | Complete |
+| **CfC** | **17.84** | **0.49** | Complete |
+| LTC | Training | – | In Progress |
+
+### Current Best Model
+
+**Closed-form Continuous-time (CfC)** currently achieves the best performance on the benchmark:
+
+- **MAE:** 17.84 ms
+- **Pearson Correlation:** 0.49
+
+Compared to the strongest conventional recurrent baseline (GRU):
+
+- **MAE:** 18.22 → **17.84 ms** (~2.1% improvement)
+- **Pearson:** 0.45 → **0.49**
+
+Compared to LSTM:
+
+- **MAE:** 19.49 → **17.84 ms** (~8.5% improvement)
 
