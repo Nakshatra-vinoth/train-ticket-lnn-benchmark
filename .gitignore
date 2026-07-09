@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Generated data
+data/*.npy
+predictions/*.npy
+models/*.pt
+models/*.json
+models/*.bin
+models/*.pkl
+
+# Keep folders
+!data/.gitkeep
+!models/.gitkeep
+!predictions/.gitkeep
