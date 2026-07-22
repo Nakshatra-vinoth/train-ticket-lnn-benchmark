@@ -1,146 +1,92 @@
 # Train Ticket LNN Benchmark
 
-An event-level latency prediction benchmark for cloud-native microservices using conventional recurrent neural networks and Liquid Neural Networks (LNNs).
+Event-level latency prediction benchmark for the Train Ticket microservices application using conventional recurrent neural networks and Liquid Neural Networks (LNNs).
 
 ---
 
 ## Overview
 
-This repository presents a complete benchmark for **end-to-end request latency prediction** on the **Train Ticket** microservices application. The benchmark integrates distributed tracing, infrastructure monitoring, and controlled workload generation to create a realistic dataset for sequential latency prediction.
+This repository contains the complete pipeline for constructing an event-level latency prediction benchmark from the Train Ticket microservices application.
 
-The dataset is constructed from:
+The benchmark combines:
 
-* **Distributed traces** collected using Jaeger
-* **System-level resource metrics** collected from Prometheus and cAdvisor
-* **Multi-regime workloads** generated with Locust to capture varying traffic conditions
+* Distributed traces collected from Jaeger
+* System metrics collected from Prometheus/cAdvisor
+* Multi-regime workloads generated using Locust
 
-The benchmark is designed to evaluate whether Liquid Neural Networks can effectively model temporal dynamics in production-like microservice environments compared with conventional deep learning and machine learning baselines.
+The prediction task is:
 
----
-
-## Prediction Task
-
-Given the previous **49 requests** in chronological order, predict the **end-to-end latency of the next request**.
-
-Each request is represented by temporal, trace-level, and system-level features, making this an **event-level sequential regression** problem.
+> Given the previous **49 requests**, predict the **end-to-end latency of the next request**.
 
 ---
 
-## Benchmark Construction Pipeline
+## Benchmark Pipeline
 
-```text
-Locust Workload Generator
-           │
-           ▼
- Train Ticket Microservices
-           │
-     ┌─────┴──────────┐
-     ▼                ▼
-Jaeger Traces   Prometheus Metrics
-     │                │
-     └──────┬─────────┘
-            ▼
-     Feature Extraction
-            ▼
- Chronological Event Stream
-            ▼
- Sliding Window Generation
-            ▼
-Chronological Train / Validation / Test Split
-            ▼
-     Model Training & Evaluation
+```
+Locust Workload
+        │
+        ▼
+Train Ticket Microservices
+        │
+        ├────────► Jaeger Traces
+        │
+        └────────► Prometheus Metrics
+                    │
+                    ▼
+           Feature Extraction
+                    │
+                    ▼
+        Chronological Event Stream
+                    │
+                    ▼
+        Sliding Window Generation
+                    │
+                    ▼
+      Train / Validation / Test Split
+                    │
+                    ▼
+          Model Training & Evaluation
 ```
 
 ---
 
 ## Repository Structure
 
-```text
+```
 code/
-    Dataset construction
+    Benchmark construction
     Feature engineering
-    Benchmark generation
-    Training scripts
-    Evaluation scripts
+    Model training scripts
 
 data/
-    Generated datasets
-    Scaled feature matrices
-    Target tensors
+    Generated datasets and preprocessing artifacts
 
 models/
-    Saved model checkpoints
+    Trained model checkpoints
 
 predictions/
-    Model predictions
-    Ground-truth targets
+    Model predictions on the test set
 
 results/
-    Training histories
-    Evaluation reports
-    Figures
-    Benchmark summaries
+    Evaluation reports and visualizations
 ```
-
----
-
-## Dataset
-
-### Sequence Configuration
-
-| Property              |                Value |
-| --------------------- | -------------------: |
-| Sequence length       | 49 previous requests |
-| Prediction target     | Next request latency |
-| Features per timestep |                   27 |
-| Task                  |           Regression |
-| Split strategy        |        Chronological |
-
-### Feature Categories
-
-Each request contains information from multiple sources:
-
-### Temporal Features
-
-* Inter-arrival time (Δt)
-* Previous request latency
-* Rolling latency statistics
-* Rolling request statistics
-
-### Distributed Trace Features
-
-* End-to-end latency
-* Critical path latency
-* Trace depth
-* Number of spans
-* Root service
-* Services involved
-* Request metadata
-
-### System Metrics
-
-* CPU utilization
-* Memory utilization
-* Network receive throughput
-* Network transmit throughput
-* Container-level resource statistics
 
 ---
 
 ## Models Evaluated
 
-| Category                   | Model                             |
-| -------------------------- | --------------------------------- |
-| Baseline                   | Naive Mean                        |
-| Classical Machine Learning | XGBoost                           |
-| Recurrent Neural Network   | LSTM                              |
-| Recurrent Neural Network   | GRU                               |
-| Liquid Neural Network      | Closed-form Continuous-time (CfC) |
-| Liquid Neural Network      | Liquid Time-Constant (LTC)        |
+| Category                 | Model                             |
+| ------------------------ | --------------------------------- |
+| Baseline                 | Naive Mean                        |
+| Classical ML             | XGBoost                           |
+| Recurrent Neural Network | LSTM                              |
+| Recurrent Neural Network | GRU                               |
+| Liquid Neural Network    | Closed-form Continuous-time (CfC) |
+| Liquid Neural Network    | Liquid Time-Constant (LTC)        |
 
 ---
 
-# Benchmark Results
+## Current Results
 
 | Model      |  MAE (ms) | Pearson Correlation |
 | ---------- | --------: | ------------------: |
@@ -148,80 +94,69 @@ Each request contains information from multiple sources:
 | XGBoost    |     21.23 |                0.19 |
 | GRU        |     18.22 |                0.45 |
 | LTC        |     18.21 |                0.47 |
-| **LSTM**   | **17.74** |                0.48 |
-| CfC        |     17.84 |            **0.49** |
+| LSTM       |     17.74 |                0.48 |
+| **CfC**    | **17.84** |            **0.49** |
 
-## Key Findings
+### Key Observations
 
-* **LSTM** achieves the **lowest Mean Absolute Error (17.74 ms)**, making it the strongest model in terms of prediction accuracy.
-* **CfC** achieves the **highest Pearson correlation (0.49)**, indicating the strongest ability to capture the overall latency trend.
-* **LTC** performs competitively with both LSTM and GRU, demonstrating that Liquid Neural Networks are effective for event-level latency prediction.
-* All recurrent neural network models significantly outperform the classical XGBoost baseline.
-* The benchmark provides a reproducible comparison between conventional recurrent architectures and Liquid Neural Networks under identical training and evaluation conditions.
+* **LSTM** achieves the **lowest Mean Absolute Error (MAE)** among the evaluated models (**17.74 ms**).
+* **CfC** achieves the **highest Pearson correlation (0.49)**, indicating the strongest linear agreement with the true latency values.
+* **LTC** performs competitively with conventional recurrent models, achieving **18.21 ms MAE** and **0.47 Pearson correlation**, demonstrating that liquid neural architectures are viable for event-level microservice latency prediction.
+* Overall, all recurrent neural network models substantially outperform the classical XGBoost baseline.
 
 ---
 
-## Evaluation Methodology
+## Feature Set
 
-The benchmark follows a strictly chronological evaluation protocol to prevent temporal leakage.
+Each request is represented using temporal, trace-level, and system-level features, including:
 
-### Data Preparation
+* Inter-arrival time (Δt)
+* End-to-end latency
+* Rolling request statistics
+* Critical path latency
+* Trace depth
+* Number of spans
+* Root service
+* Services involved
+* CPU usage
+* Memory usage
+* Network statistics
 
-* Chronological ordering of requests
+Each training sample consists of:
+
+* 49 historical requests
+* 27 features per timestep
+
+---
+
+## Evaluation Protocol
+
+* Chronological train/validation/test split
 * Sliding-window sequence generation
-* Train/validation/test chronological split
-* Log-space target transformation
-* Feature normalization using training statistics only
-
-### Evaluation Metrics
-
+* Log-space target scaling
 * Mean Absolute Error (MAE)
 * Root Mean Squared Error (RMSE)
-* Pearson Correlation Coefficient
-* Coefficient of Determination (R²)
+* Pearson correlation
+* Coefficient of determination (R²)
 
 ---
 
 ## Current Status
 
-| Component                   | Status |
-| --------------------------- | :----: |
-| Benchmark construction      |    ✅   |
-| Dataset generation          |    ✅   |
-| Feature engineering         |    ✅   |
-| Train/Validation/Test split |    ✅   |
-| XGBoost baseline            |    ✅   |
-| LSTM baseline               |    ✅   |
-| GRU baseline                |    ✅   |
-| CfC baseline                |    ✅   |
-| LTC baseline                |    ✅   |
-| Benchmark evaluation        |    ✅   |
-
----
-
-## Reproducibility
-
-The repository contains everything required to reproduce the benchmark:
-
-* Dataset construction pipeline
-* Feature extraction scripts
-* Chronological benchmark generation
-* Baseline training implementations
-* Saved model checkpoints
-* Prediction outputs
-* Evaluation reports
-* Training histories
+* ✅ Benchmark construction completed
+* ✅ Dataset preprocessing completed
+* ✅ XGBoost baseline completed
+* ✅ LSTM baseline completed
+* ✅ GRU baseline completed
+* ✅ CfC baseline completed
+* ✅ LTC baseline completed
 
 ---
 
 ## Future Work
 
-Potential extensions include:
-
-* Multiple-seed evaluation for statistical robustness
-* Workload regime-specific analysis
-* Latency spike prediction
-* Uncertainty-aware latency prediction
-* Hyperparameter optimization for Liquid Neural Networks
-* Transformer- and attention-based sequence models
-* Cross-application evaluation on additional microservice benchmarks
+* Evaluate robustness across multiple random seeds
+* Compare model performance across workload regimes
+* Analyze latency spike prediction
+* Investigate uncertainty estimation for latency prediction
+* Explore larger Liquid Neural Network architectures and hybrid models
