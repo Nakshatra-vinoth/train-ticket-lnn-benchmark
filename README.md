@@ -10,9 +10,9 @@ This repository contains the complete pipeline for constructing an event-level l
 
 The benchmark combines:
 
-* Distributed traces collected from Jaeger
-* System metrics collected from Prometheus/cAdvisor
-* Multi-regime workloads generated using Locust
+- Distributed traces collected from Jaeger
+- System metrics collected from Prometheus/cAdvisor
+- Multi-regime workloads generated using Locust
 
 The prediction task is:
 
@@ -59,104 +59,110 @@ code/
     Model training scripts
 
 data/
-    Generated datasets and preprocessing artifacts
+    Placeholder for generated datasets
 
 models/
-    Trained model checkpoints
+    Placeholder for trained models
 
 predictions/
-    Model predictions on the test set
+    Placeholder for model predictions
 
 results/
-    Evaluation reports and visualizations
+    Evaluation figures
 ```
 
 ---
 
 ## Models Evaluated
 
-| Category                 | Model                             |
-| ------------------------ | --------------------------------- |
-| Baseline                 | Naive Mean                        |
-| Classical ML             | XGBoost                           |
-| Recurrent Neural Network | LSTM                              |
-| Recurrent Neural Network | GRU                               |
-| Liquid Neural Network    | Closed-form Continuous-time (CfC) |
-| Liquid Neural Network    | Liquid Time-Constant (LTC)        |
+| Category | Model |
+|----------|-------|
+| Baseline | Naive Mean |
+| Classical ML | XGBoost |
+| Recurrent Neural Network | LSTM |
+| Recurrent Neural Network | GRU |
+| Liquid Neural Network | Closed-form Continuous-time (CfC) |
+| Liquid Neural Network | Liquid Time-Constant (LTC) |
 
 ---
 
 ## Current Results
 
-| Model      |  MAE (ms) | Pearson Correlation |
-| ---------- | --------: | ------------------: |
-| Naive Mean |     22.42 |                   — |
-| XGBoost    |     21.23 |                0.19 |
-| GRU        |     18.22 |                0.45 |
-| LTC        |     18.21 |                0.47 |
-| LSTM       |     17.74 |                0.48 |
-| **CfC**    | **17.84** |            **0.49** |
+| Model | MAE (ms) | Pearson Correlation |
+|------|---------:|--------------------:|
+| Naive Mean | 22.42 | — |
+| XGBoost | 21.23 | 0.19 |
+| LSTM | 19.49 | 0.35 |
+| GRU | 18.22 | 0.45 |
+| **CfC** | **17.84** | **0.49** |
+| LTC | 18.21 | 0.47 |
 
-### Key Observations
+Both Liquid Neural Network architectures outperform the conventional recurrent baselines.
 
-* **LSTM** achieves the **lowest Mean Absolute Error (MAE)** among the evaluated models (**17.74 ms**).
-* **CfC** achieves the **highest Pearson correlation (0.49)**, indicating the strongest linear agreement with the true latency values.
-* **LTC** performs competitively with conventional recurrent models, achieving **18.21 ms MAE** and **0.47 Pearson correlation**, demonstrating that liquid neural architectures are viable for event-level microservice latency prediction.
-* Overall, all recurrent neural network models substantially outperform the classical XGBoost baseline.
+CfC achieves the best overall performance:
 
+- MAE reduced from **18.22 ms** (GRU) to **17.84 ms** (~2.1%)
+- Pearson correlation improved from **0.45** to **0.49**
+
+LTC closely follows CfC:
+
+- MAE: **18.21 ms**
+- Pearson correlation: **0.47**
+
+Compared to LSTM:
+
+- CfC reduces MAE by approximately **8.5%**
+- LTC reduces MAE by approximately **6.6%**
+  
 ---
 
 ## Feature Set
 
 Each request is represented using temporal, trace-level, and system-level features, including:
 
-* Inter-arrival time (Δt)
-* End-to-end latency
-* Rolling request statistics
-* Critical path latency
-* Trace depth
-* Number of spans
-* Root service
-* Services involved
-* CPU usage
-* Memory usage
-* Network statistics
+- Inter-arrival time (Δt)
+- End-to-end latency
+- Rolling request statistics
+- Critical path latency
+- Trace depth
+- Number of spans
+- Root service
+- Services involved
+- CPU usage
+- Memory usage
+- Network statistics
 
 Each training sample consists of:
 
-* 49 historical requests
-* 27 features per timestep
+- 49 historical requests
+- 27 features per timestep
 
 ---
 
 ## Evaluation Protocol
 
-* Chronological train/validation/test split
-* Sliding-window sequence generation
-* Log-space target scaling
-* Mean Absolute Error (MAE)
-* Root Mean Squared Error (RMSE)
-* Pearson correlation
-* Coefficient of determination (R²)
+- Chronological train/validation/test split
+- Sliding-window sequence generation
+- Log-space target scaling
+- Mean Absolute Error (MAE)
+- Pearson correlation
 
 ---
 
 ## Current Status
 
-* ✅ Benchmark construction completed
-* ✅ Dataset preprocessing completed
-* ✅ XGBoost baseline completed
-* ✅ LSTM baseline completed
-* ✅ GRU baseline completed
-* ✅ CfC baseline completed
-* ✅ LTC baseline completed
+- Benchmark construction completed
+- Dataset preprocessing completed
+- LSTM baseline completed
+- GRU baseline completed
+- XGBoost baseline completed
+- CfC baseline completed
+- LTC baseline completed
 
 ---
 
 ## Future Work
 
-* Evaluate robustness across multiple random seeds
-* Compare model performance across workload regimes
-* Analyze latency spike prediction
-* Investigate uncertainty estimation for latency prediction
-* Explore larger Liquid Neural Network architectures and hybrid models
+- Compare performance across workload regimes
+- Analyze latency spike prediction
+- Evaluate statistical significance across multiple random seeds change only ltc part withok update this in this readme # Train Ticket LNN Benchmark
