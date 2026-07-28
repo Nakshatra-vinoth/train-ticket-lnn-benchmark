@@ -1,27 +1,16 @@
-# Python
-__pycache__/
-*.py[cod]
-
-# Virtual environments
 .venv/
-venv/
+__pycache__/
+*.pyc
 
-# OS files
-.DS_Store
-Thumbs.db
+benchmark/*.npy
+benchmark/*.jsonl
 
-# Logs
-*.log
-
-# Generated data
-data/*.npy
-predictions/*.npy
 models/*.pt
-models/*.json
-models/*.bin
-models/*.pkl
+*.pt
 
-# Keep folders
-!data/.gitkeep
-!models/.gitkeep
-!predictions/.gitkeep
+results/*.npy
+results/*.csv
+results/*.md
+
+*_test_preds_ms.npy
+*_test_targets_ms.npy

@@ -2,23 +2,22 @@ from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "benchmark"
 import json
-import csv
-import time
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
+from ncps.torch import CfC
 
 torch.manual_seed(42)
 
-X_train = np.load(DATA_DIR /"X_train_scaled.npy")
-X_val = np.load(DATA_DIR /"X_val_scaled.npy")
-X_test = np.load(DATA_DIR /"X_test_scaled.npy")
-y_train = np.load(DATA_DIR /"y_train_scaled.npy")
-y_val = np.load(DATA_DIR /"y_val_scaled.npy")
-y_test = np.load(DATA_DIR /"y_test_scaled.npy")
+X_train = np.load(DATA_DIR/ "X_train_scaled.npy")
+X_val = np.load(DATA_DIR/ "X_val_scaled.npy")
+X_test = np.load(DATA_DIR/ "X_test_scaled.npy")
+y_train = np.load(DATA_DIR/ "y_train_scaled.npy")
+y_val = np.load(DATA_DIR/ "y_val_scaled.npy")
+y_test = np.load(DATA_DIR/ "y_test_scaled.npy")
 
-with open(DATA_DIR /"scaler_params.json") as f:
+with open(DATA_DIR/ "scaler_params.json") as f:
     scaler = json.load(f)
 y_log_mean, y_log_std = scaler["y_log_mean"], scaler["y_log_std"]
 
@@ -35,34 +34,30 @@ train_loader = to_loader(X_train, y_train, shuffle=True)
 val_loader = to_loader(X_val, y_val, shuffle=False)
 test_loader = to_loader(X_test, y_test, shuffle=False)
 
-class GRUBaseline(nn.Module):
-    def __init__(self, input_dim, hidden_dim=64, num_layers=2, dropout=0.2):
+class CfCBaseline(nn.Module):
+    def __init__(self, input_dim, hidden_dim=32):
         super().__init__()
-        self.gru = nn.GRU(input_dim, hidden_dim, num_layers=num_layers,
-                           batch_first=True, dropout=dropout)
+        # No scheduler, no mixed_memory -- isolating hidden_dim as the only change from v1
+        self.cfc = CfC(input_dim, hidden_dim, batch_first=True)
         self.head = nn.Sequential(
-            nn.Linear(hidden_dim, 32),
+            nn.Linear(hidden_dim, 16),
             nn.ReLU(),
-            nn.Linear(32, 1)
+            nn.Linear(16, 1)
         )
 
     def forward(self, x):
-        out, h_n = self.gru(x)
+        out, h_n = self.cfc(x)
         last_hidden = out[:, -1, :]
         return self.head(last_hidden).squeeze(-1)
 
-model = GRUBaseline(input_dim=X_train.shape[2]).to(device)
+model = CfCBaseline(input_dim=X_train.shape[2], hidden_dim=32).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 criterion = nn.MSELoss()
 
 EPOCHS = 30
 best_val_loss = float("inf")
-best_val_epoch = None
 patience = 5
 patience_counter = 0
-early_stopping_epoch = None
-history = []
-training_start = time.time()
 
 for epoch in range(1, EPOCHS + 1):
     model.train()
@@ -86,37 +81,19 @@ for epoch in range(1, EPOCHS + 1):
 
     train_loss = np.mean(train_losses)
     val_loss = np.mean(val_losses)
-    print(f"Epoch {epoch:2d}: train_loss={train_loss:.4f}  val_loss={val_loss:.4f}")
-    history.append({
-        "epoch": epoch,
-        "train_loss": float(train_loss),
-        "val_loss": float(val_loss),
-    })
+    print(f"Epoch {epoch:2d}: train_loss={train_loss:.4f}  val_loss={val_loss:.4f}", flush=True)
 
     if val_loss < best_val_loss:
         best_val_loss = val_loss
-        best_val_epoch = epoch
         patience_counter = 0
-        torch.save(model.state_dict(), "gru_baseline_best.pt")
+        torch.save(model.state_dict(), "cfc_v4_best.pt")
     else:
         patience_counter += 1
         if patience_counter >= patience:
             print(f"Early stopping at epoch {epoch} (no improvement for {patience} epochs)")
-            early_stopping_epoch = epoch
             break
 
-training_time_seconds = time.time() - training_start
-
-print(f"\nBest validation loss: {best_val_loss:.4f}")
-print(f"Best validation epoch: {best_val_epoch}")
-print(f"Training time: {training_time_seconds:.2f} seconds")
-
-with open("gru_training_history.csv", "w", newline="") as f:
-    writer = csv.DictWriter(f, fieldnames=["epoch", "train_loss", "val_loss"])
-    writer.writeheader()
-    writer.writerows(history)
-
-model.load_state_dict(torch.load("gru_baseline_best.pt"))
+model.load_state_dict(torch.load("cfc_v4_best.pt"))
 model.eval()
 
 all_preds, all_targets = [], []
@@ -138,41 +115,18 @@ mae = np.mean(np.abs(preds_ms - targets_ms))
 rmse = np.sqrt(np.mean((preds_ms - targets_ms) ** 2))
 mape = np.mean(np.abs((preds_ms - targets_ms) / np.clip(targets_ms, 1e-3, None))) * 100
 pearson_corr = np.corrcoef(preds_ms, targets_ms)[0, 1]
-ss_res = np.sum((targets_ms - preds_ms) ** 2)
-ss_tot = np.sum((targets_ms - np.mean(targets_ms)) ** 2)
-r2 = 1 - ss_res / ss_tot
 
 print(f"\n=== Test set results (real ms) ===")
 print(f"MAE:  {mae:.2f} ms")
 print(f"RMSE: {rmse:.2f} ms")
 print(f"MAPE: {mape:.2f}%")
 print(f"Pearson correlation: {pearson_corr:.4f}")
-print(f"R2:   {r2:.4f}")
 
 naive_mae = np.mean(np.abs(targets_ms - np.expm1(y_log_mean)))
 print(f"\nNaive baseline MAE: {naive_mae:.2f} ms")
-print(f"GRU model MAE:      {mae:.2f} ms")
+print(f"CfC v4 (hidden_dim=32) MAE: {mae:.2f} ms")
+print(f"  compare: v1 (hidden_dim=64)=17.84 ms")
 
-np.save("gru_test_preds_ms.npy", preds_ms)
-np.save("gru_test_targets_ms.npy", targets_ms)
-
-with open("gru_training_summary.md", "w") as f:
-    f.write("# GRU Training Summary\n\n")
-    f.write("Frozen benchmark: yes\n\n")
-    f.write(f"- Best validation loss: {best_val_loss:.6f}\n")
-    f.write(f"- Best validation epoch: {best_val_epoch}\n")
-    if early_stopping_epoch is None:
-        f.write("- Early stopping epoch: not triggered\n")
-    else:
-        f.write(f"- Early stopping epoch: {early_stopping_epoch}\n")
-    f.write(f"- Total training time seconds: {training_time_seconds:.2f}\n")
-    f.write("\n## Test Metrics\n\n")
-    f.write(f"- MAE: {mae:.2f} ms\n")
-    f.write(f"- RMSE: {rmse:.2f} ms\n")
-    f.write(f"- MAPE: {mape:.2f}%\n")
-    f.write(f"- R2: {r2:.4f}\n")
-    f.write(f"- Pearson correlation: {pearson_corr:.4f}\n")
-    f.write(f"- Naive MAE: {naive_mae:.2f} ms\n")
-
-print("\nSaved gru_baseline_best.pt, gru_test_preds_ms.npy, gru_test_targets_ms.npy")
-print("Saved gru_training_history.csv, gru_training_summary.md")
+np.save("cfc_v4_test_preds_ms.npy", preds_ms)
+np.save("cfc_v4_test_targets_ms.npy", targets_ms)
+print("\nSaved cfc_v4_best.pt")

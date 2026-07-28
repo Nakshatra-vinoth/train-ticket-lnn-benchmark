@@ -1,15 +1,18 @@
+from pathlib import Path
+
+DATA_DIR = Path(__file__).resolve().parent.parent / "benchmark"
 import json
 import numpy as np
 import xgboost as xgb
 
-X_train = np.load("X_train_scaled.npy")
-X_val = np.load("X_val_scaled.npy")
-X_test = np.load("X_test_scaled.npy")
-y_train = np.load("y_train_scaled.npy")
-y_val = np.load("y_val_scaled.npy")
-y_test = np.load("y_test_scaled.npy")
+X_train = np.load(DATA_DIR /"X_train_scaled.npy")
+X_val = np.load(DATA_DIR /"X_val_scaled.npy")
+X_test = np.load(DATA_DIR /"X_test_scaled.npy")
+y_train = np.load(DATA_DIR /"y_train_scaled.npy")
+y_val = np.load(DATA_DIR /"y_val_scaled.npy")
+y_test = np.load(DATA_DIR /"y_test_scaled.npy")
 
-with open("scaler_params.json") as f:
+with open(DATA_DIR /"scaler_params.json") as f:
     scaler = json.load(f)
 y_log_mean, y_log_std = scaler["y_log_mean"], scaler["y_log_std"]
 

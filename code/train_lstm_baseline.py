@@ -1,3 +1,6 @@
+from pathlib import Path
+
+DATA_DIR = Path(__file__).resolve().parent.parent / "benchmark"
 import json
 import csv
 import time
@@ -12,14 +15,15 @@ np.random.seed(42)
 # ----------------------------
 # Load data
 # ----------------------------
-X_train = np.load("data/X_train_scaled.npy")
-X_val   = np.load("data/X_val_scaled.npy")
-X_test  = np.load("data/X_test_scaled.npy")
+X_train = np.load(DATA_DIR / "X_train_scaled.npy")
+X_val = np.load(DATA_DIR / "X_val_scaled.npy")
+X_test = np.load(DATA_DIR / "X_test_scaled.npy")
 
-y_train = np.load("data/y_train_scaled.npy")
-y_val   = np.load("data/y_val_scaled.npy")
-y_test  = np.load("data/y_test_scaled.npy")
-with open("data/scaler_params.json") as f:
+y_train = np.load(DATA_DIR / "y_train_scaled.npy")
+y_val = np.load(DATA_DIR / "y_val_scaled.npy")
+y_test = np.load(DATA_DIR / "y_test_scaled.npy")
+
+with open(DATA_DIR / "scaler_params.json") as f:
     scaler = json.load(f)
 
 y_log_mean = scaler["y_log_mean"]

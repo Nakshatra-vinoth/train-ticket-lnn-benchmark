@@ -1,3 +1,6 @@
+from pathlib import Path
+
+DATA_DIR = Path(__file__).resolve().parent.parent / "benchmark"
 import numpy as np
 import torch
 import torch.nn as nn
@@ -14,12 +17,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # Load frozen benchmark artifacts
-X_train = np.load("X_train_scaled.npy")   # (N, 49, 27)
-X_val   = np.load("X_val_scaled.npy")
-X_test  = np.load("X_test_scaled.npy")
-y_train = np.load("y_train.npy")          # raw ms, same target as LSTM/GRU
-y_val   = np.load("y_val.npy")
-y_test  = np.load("y_test.npy")
+X_train = np.load(DATA_DIR / "X_train_scaled.npy")   # (N, 49, 27)
+X_val   = np.load(DATA_DIR / "X_val_scaled.npy")
+X_test  = np.load(DATA_DIR / "X_test_scaled.npy")
+y_train = np.load(DATA_DIR / "y_train.npy")          # raw ms, same target as LSTM/GRU
+y_val   = np.load(DATA_DIR / "y_val.npy")
+y_test  = np.load(DATA_DIR / "y_test.npy")
 
 print(f"Train: {X_train.shape}, Val: {X_val.shape}, Test: {X_test.shape}")
 
@@ -31,7 +34,7 @@ y_val_t   = torch.tensor(y_val, dtype=torch.float32).unsqueeze(-1)
 y_test_t  = torch.tensor(y_test, dtype=torch.float32).unsqueeze(-1)
 
 INPUT_SIZE = X_train.shape[2]   # 27
-UNITS = 32
+UNITS = 64
 
 wiring = AutoNCP(UNITS, 1)  # 1 output unit
 model = CfC(INPUT_SIZE, wiring, batch_first=True).to(device)
