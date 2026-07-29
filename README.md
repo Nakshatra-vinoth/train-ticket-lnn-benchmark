@@ -89,14 +89,15 @@ results/
 
 ## Current Results
 
-| Model | MAE (ms) | Pearson Correlation |
-| ----- | -------: | ------------------: |
+## Current Results
+
+| Model | MAE (ms) | Pearson |
+| :---- | -------: | -------: |
 | Naive Mean | 22.42 | — |
 | XGBoost | 21.23 | 0.19 |
+| LSTM | 19.49 | 0.35 |
 | GRU | 18.22 | 0.45 |
-| LTC | 18.21 | 0.47 |
-| LSTM | **17.74** | 0.48 |
-| **CfC** | 17.84 | **0.49** |
+| **CfC** | **17.84** | **0.49** |
 
 ### Key Observations
 
