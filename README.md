@@ -6,17 +6,17 @@ Event-level latency prediction benchmark for the Train Ticket microservices appl
 
 ## Overview
 
-This repository contains the complete pipeline for constructing an event-level latency prediction benchmark from the Train Ticket microservices application.
+This repository presents a complete benchmark for **event-level latency prediction** in the Train Ticket microservices application. The benchmark combines distributed tracing, infrastructure monitoring, and workload generation to construct a chronological sequence prediction task.
 
-The benchmark combines:
+The benchmark integrates:
 
-- Distributed traces collected from Jaeger
-- System metrics collected from Prometheus/cAdvisor
-- Multi-regime workloads generated using Locust
+- Distributed traces collected using **Jaeger**
+- System metrics collected from **Prometheus** and **cAdvisor**
+- Multi-regime workloads generated with **Locust**
 
 The prediction task is:
 
-> Given the previous **49 requests**, predict the **end-to-end latency of the next request**.
+> **Given the previous 49 requests, predict the end-to-end latency of the next request.**
 
 ---
 
@@ -56,17 +56,16 @@ Train Ticket Microservices
 code/
     Benchmark construction
     Feature engineering
-    Model training scripts
-    Evaluation scripts
+    Model training and evaluation scripts
 
 benchmark/
-    Processed train/validation/test datasets
+    Processed datasets
 
 models/
     Trained model checkpoints
 
 predictions/
-    Model predictions on the test set
+    Test-set predictions
 
 results/
     Evaluation summaries and visualizations
@@ -77,7 +76,7 @@ results/
 ## Models Evaluated
 
 | Category | Model |
-| -------- | ----- |
+|----------|-------|
 | Baseline | Naive Mean |
 | Classical Machine Learning | XGBoost |
 | Recurrent Neural Network | LSTM |
@@ -89,22 +88,22 @@ results/
 
 ## Current Results
 
-## Current Results
-
 | Model | MAE (ms) | Pearson |
 | :---- | -------: | -------: |
 | Naive Mean | 22.42 | — |
 | XGBoost | 21.23 | 0.19 |
 | LSTM | 19.49 | 0.35 |
 | GRU | 18.22 | 0.45 |
+| LTC | 18.21 | 0.47 |
 | **CfC** | **17.84** | **0.49** |
 
 ### Key Observations
 
-- **LSTM** achieves the **lowest Mean Absolute Error (MAE)** among the evaluated models (**17.74 ms**).
-- **CfC** achieves the **highest Pearson correlation (0.49)** while also being the **smallest** and **fastest** neural network evaluated.
-- **LTC** performs competitively in predictive accuracy but incurs substantially higher inference latency due to numerical ODE integration.
-- All recurrent neural network models significantly outperform the classical XGBoost baseline on event-level latency prediction.
+- **CfC** achieves the **lowest Mean Absolute Error (17.84 ms)** and the **highest Pearson correlation (0.49)** among all evaluated models.
+- Both **CfC** and **LTC** are based on the same underlying continuous-time liquid dynamics. The key difference lies in how these dynamics are computed: **CfC uses a closed-form approximation**, whereas **LTC numerically solves the underlying ordinary differential equation (ODE) at every timestep**.
+- Both liquid neural architectures improve the correlation between predicted and ground-truth latency compared to conventional recurrent networks. However, **only the closed-form CfC model translates this stronger temporal modeling into a reduction in absolute prediction error**.
+- Although **LTC** achieves a higher Pearson correlation than the GRU and LSTM baselines, its substantially higher computational cost is **not accompanied by an improvement in prediction accuracy over CfC**.
+- Overall, **CfC provides the best trade-off between predictive accuracy, model size, and inference efficiency** on this benchmark.
 
 ---
 
@@ -118,13 +117,13 @@ results/
 | GRU | 44,929 | 0.126095 ms/sample |
 | LSTM | 59,201 | 0.270589 ms/sample |
 
-> Inference latency is measured on CPU as the average per-sample inference time over multiple forward passes.
+> Inference latency was measured on CPU as the average per-sample inference time over multiple forward passes.
 
 ---
 
 ## Feature Set
 
-Each request is represented using temporal, trace-level, and system-level features, including:
+Each request is represented using temporal, trace-level, and system-level information, including:
 
 - Inter-arrival time (Δt)
 - End-to-end latency
@@ -134,8 +133,8 @@ Each request is represented using temporal, trace-level, and system-level featur
 - Number of spans
 - Root service
 - Services involved
-- CPU usage
-- Memory usage
+- CPU utilization
+- Memory utilization
 - Network statistics
 
 Each training sample consists of:
@@ -147,15 +146,17 @@ Each training sample consists of:
 
 ## Evaluation Protocol
 
-The benchmark follows a chronological evaluation protocol to avoid temporal leakage.
+Models are evaluated using a chronological split to prevent temporal leakage.
+
+Evaluation includes:
 
 - Chronological train/validation/test split
 - Sliding-window sequence generation
 - Log-space target scaling
 - Mean Absolute Error (MAE)
 - Root Mean Squared Error (RMSE)
-- Pearson Correlation
-- Coefficient of Determination (R²)
+- Pearson correlation coefficient
+- Coefficient of determination (R²)
 
 ---
 
@@ -175,21 +176,20 @@ The benchmark follows a chronological evaluation protocol to avoid temporal leak
 ## Future Work
 
 - Evaluate robustness across multiple random seeds
-- Compare model performance across different workload regimes
-- Analyze latency spike prediction
-- Investigate uncertainty estimation for latency prediction
-- Explore larger Liquid Neural Network architectures
-- Evaluate hybrid recurrent-liquid architectures
+- Analyze performance across different workload regimes
+- Investigate latency spike prediction
+- Explore uncertainty estimation for latency prediction
+- Evaluate larger Liquid Neural Networks
+- Explore hybrid recurrent-liquid architectures
 
 ---
 
 ## Summary
 
-This benchmark demonstrates that Liquid Neural Networks are a promising alternative to conventional recurrent neural networks for event-level microservice latency prediction.
+This benchmark demonstrates that Liquid Neural Networks are an effective approach for event-level latency prediction in microservice systems.
 
-Among the evaluated models:
+Among the evaluated models, **CfC** achieves the best overall performance, obtaining the **lowest MAE (17.84 ms)** and the **highest Pearson correlation (0.49)** while also being the **smallest neural network (16,540 trainable parameters)** and the **fastest neural architecture during inference (0.043458 ms/sample)**.
 
-- **LSTM** achieves the lowest prediction error (**17.74 ms MAE**).
-- **CfC** achieves the strongest correlation with ground truth (**0.49 Pearson correlation**) while also being the **smallest model (16,540 parameters)** and the **fastest neural network during inference (0.043 ms/sample)**.
-- **LTC** achieves competitive predictive performance but with significantly higher inference cost due to continuous-time ODE integration.
-- Overall, recurrent neural networks consistently outperform the classical XGBoost baseline, demonstrating the importance of temporal modeling for latency prediction in microservice systems.
+Although **LTC** is derived from the same continuous-time dynamics, its reliance on numerical ODE integration results in significantly higher inference latency (**4.38 ms/sample**) without improving predictive accuracy over CfC. This suggests that the closed-form approximation used by CfC retains the benefits of liquid dynamics while offering substantially better computational efficiency.
+
+Overall, the results indicate that **CfC provides the strongest balance between accuracy, correlation, model complexity, and inference speed**, making it the most effective neural architecture evaluated for this benchmark.
