@@ -1,95 +1,21 @@
 # Train Ticket LNN Benchmark
 
-Event-level latency prediction benchmark for the Train Ticket microservices application using conventional recurrent neural networks and Liquid Neural Networks (LNNs).
+Event-level latency prediction benchmark for the Train Ticket microservices application, comparing a naive baseline, XGBoost, discrete-time recurrent networks (LSTM, GRU), and continuous-time Liquid Neural Networks (LTC, CfC).
+
+Accompanying report: `Evaluating Liquid Neural Networks for Latency Prediction in Microservice Architectures.pdf`
 
 ---
 
-## Overview
+## 1. Overview
 
-This repository presents a complete benchmark for **event-level latency prediction** in the Train Ticket microservices application. The benchmark combines distributed tracing, infrastructure monitoring, and workload generation to construct a chronological sequence prediction task.
+This repository builds an **event-level latency prediction benchmark** from the Train Ticket microservices application under a multi-regime Locust workload, and benchmarks six models on it:
 
-The benchmark integrates:
+> **Given the 49 most recent requests (27 features each), predict the end-to-end latency of the next request.**
 
-- Distributed traces collected using **Jaeger**
-- System metrics collected from **Prometheus** and **cAdvisor**
-- Multi-regime workloads generated with **Locust**
+Pipeline: Locust workload → Train Ticket → Jaeger traces + Prometheus/cAdvisor metrics → feature extraction (27 features) → chronological sliding-window split (w=49) → model training & evaluation.
 
-The prediction task is:
-
-> **Given the previous 49 requests, predict the end-to-end latency of the next request.**
-
----
-
-## Benchmark Pipeline
-
-```
-Locust Workload
-        │
-        ▼
-Train Ticket Microservices
-        │
-        ├────────► Jaeger Traces
-        │
-        └────────► Prometheus Metrics
-                    │
-                    ▼
-           Feature Extraction
-                    │
-                    ▼
-        Chronological Event Stream
-                    │
-                    ▼
-        Sliding Window Generation
-                    │
-                    ▼
-      Train / Validation / Test Split
-                    │
-                    ▼
-          Model Training & Evaluation
-```
-
----
-
-## Repository Structure
-
-```
-code/
-    Benchmark construction
-    Feature engineering
-    Model training and evaluation scripts
-
-benchmark/
-    Processed datasets
-
-models/
-    Trained model checkpoints
-
-predictions/
-    Test-set predictions
-
-results/
-    Evaluation summaries and visualizations
-```
-
----
-
-## Models Evaluated
-
-| Category | Model |
-|----------|-------|
-| Baseline | Naive Mean |
-| Classical Machine Learning | XGBoost |
-| Recurrent Neural Network | LSTM |
-| Recurrent Neural Network | GRU |
-| Liquid Neural Network | Closed-form Continuous-time (CfC) |
-| Liquid Neural Network | Liquid Time-Constant (LTC) |
-
----
-
-## Current Results
-
-| Model | MAE (ms) | Pearson |
-| :---- | -------: | -------: |
+| Model | MAE (ms) | Pearson r |
+|---|---:|---:|
 | Naive Mean | 22.42 | — |
 | XGBoost | 21.23 | 0.19 |
 | LSTM | 19.49 | 0.35 |
@@ -97,99 +23,164 @@ results/
 | LTC | 18.21 | 0.47 |
 | **CfC** | **17.84** | **0.49** |
 
-### Key Observations
-
-- **CfC** achieves the **lowest Mean Absolute Error (17.84 ms)** and the **highest Pearson correlation (0.49)** among all evaluated models.
-- Both **CfC** and **LTC** are based on the same underlying continuous-time liquid dynamics. The key difference lies in how these dynamics are computed: **CfC uses a closed-form approximation**, whereas **LTC numerically solves the underlying ordinary differential equation (ODE) at every timestep**.
-- Both liquid neural architectures improve the correlation between predicted and ground-truth latency compared to conventional recurrent networks. However, **only the closed-form CfC model translates this stronger temporal modeling into a reduction in absolute prediction error**.
-- Although **LTC** achieves a higher Pearson correlation than the GRU and LSTM baselines, its substantially higher computational cost is **not accompanied by an improvement in prediction accuracy over CfC**.
-- Overall, **CfC provides the best trade-off between predictive accuracy, model size, and inference efficiency** on this benchmark.
+Full discussion of these results is in the report. This README covers how to reproduce them.
 
 ---
 
-## Model Complexity & Inference Performance
+## 2. Repository Structure
 
-| Model | Parameters | Inference Latency |
-| ----- | ---------: | ----------------: |
-| XGBoost | 190 trees | **0.000011 ms/sample** |
-| **CfC** | **16,540** | **0.043458 ms/sample** |
-| LTC | 25,783 | 4.380986 ms/sample |
-| GRU | 44,929 | 0.126095 ms/sample |
-| LSTM | 59,201 | 0.270589 ms/sample |
+```
+code/
+  collector.py              # Live data collection from Jaeger/Prometheus (needs a running Train Ticket + docker_stats_collector.py, see §6)
+  compute_deltat.py         # dataset.jsonl -> dataset_with_deltat.jsonl
+  construct_benchmark.py    # dataset_with_deltat.jsonl -> windows_index.jsonl (chronological, gap-purged)
+  split_windows.py          # windows_index.jsonl -> windows_{train,val,test}.jsonl
+  extract_features.py       # -> X_{train,val,test}.npy, y_{train,val,test}.npy (27-dim features, raw ms target)
+  scale_features.py         # -> X_{train,val,test}_scaled.npy (z-score, fit on train only)
+  scale_targets_log.py      # -> y_{train,val,test}_scaled.npy (log1p + standardize, fit on train only)
+  locustfile.py             # Multi-regime workload generator (6 phases: low_load, ramp_up, steady_state, bursty, congestion, recovery)
 
-> Inference latency was measured on CPU as the average per-sample inference time over multiple forward passes.
+  train_xgboost_baseline.py train_lstm_baseline.py train_gru_baseline.py
+  train_ltc_baseline.py     train_cfc_baseline.py       # <- the FIVE scripts that produced Table 1/2 (see §5 for a caveat on CfC)
+  train_cfc_v2.py train_cfc_v4.py                        # Exploratory CfC ablations, NOT used for the reported numbers (see §5)
 
----
+  evaluate_xgboost.py evaluate_lstm.py evaluate_gru.py
+  evaluate_ltc.py evaluate_cfc.py                         # Reload the saved checkpoints, report params + CPU inference latency (Table 2)
 
-## Feature Set
+benchmark/
+  scaler_params.json         # Versioned. The rest of this folder's contents (npy/jsonl) are gitignored — download separately, see §4
 
-Each request is represented using temporal, trace-level, and system-level information, including:
+models/                      # Created when you run training — holds *_best.pt checkpoints (gitignored)
+xgboost_baseline.json        # Trained XGBoost booster, checked into the repo root (the only pre-trained artifact included)
+requirements.txt
+```
 
-- Inter-arrival time (Δt)
-- End-to-end latency
-- Rolling request statistics
-- Critical path latency
-- Trace depth
-- Number of spans
-- Root service
-- Services involved
-- CPU utilization
-- Memory utilization
-- Network statistics
-
-Each training sample consists of:
-
-- **49 historical requests**
-- **27 features per timestep**
+Note: `models/`, `predictions/`, `results/` are **not** pre-populated — they're produced by running the scripts, and everything under them is gitignored.
 
 ---
 
-## Evaluation Protocol
+## 3. Environment Setup
 
-Models are evaluated using a chronological split to prevent temporal leakage.
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-Evaluation includes:
+Key packages: `torch`, `ncps` (LTC/CfC implementations), `xgboost`, `scikit-learn`, `scipy`, `numpy`, `pandas`, `locust`.
 
-- Chronological train/validation/test split
-- Sliding-window sequence generation
-- Log-space target scaling
-- Mean Absolute Error (MAE)
-- Root Mean Squared Error (RMSE)
-- Pearson correlation coefficient
-- Coefficient of determination (R²)
+All neural models except CfC's training script are forced to `torch.device("cpu")`, and inference is measured with `torch.set_num_threads(1)`, matching the CPU inference numbers in Table 2. A GPU is not required to reproduce any result in this repo.
 
 ---
 
-## Current Status
+## 4. Getting the Data (Required)
 
-- ✅ Benchmark construction completed
-- ✅ Dataset preprocessing completed
-- ✅ Naive baseline completed
-- ✅ XGBoost baseline completed
-- ✅ LSTM baseline completed
-- ✅ GRU baseline completed
-- ✅ CfC baseline completed
-- ✅ LTC baseline completed
+The processed benchmark artifacts (frozen dataset, windows, and train/val/test `.npy` arrays) are too large for git and are provided separately via Google Drive:
+
+**Drive link: `<PASTE YOUR SHARED DRIVE LINK HERE>`**
+
+Download every file shown there and place them in `benchmark/`, so it contains:
+
+```
+benchmark/
+  dataset_with_deltat.jsonl
+  windows_train.jsonl  windows_val.jsonl  windows_test.jsonl
+  X_train.npy  X_val.npy  X_test.npy
+  X_train_scaled.npy  X_val_scaled.npy  X_test_scaled.npy
+  y_train.npy  y_val.npy  y_test.npy
+  y_train_scaled.npy  y_val_scaled.npy  y_test_scaled.npy
+  scaler_params.json
+```
+
+This is the frozen, already-split, already-scaled benchmark used for every number in Table 1 and Table 2. **You do not need to regenerate these files to reproduce the paper's results** — only to reproduce the underlying data-collection process itself (§6, not required for grading).
 
 ---
 
-## Future Work
+## 5. Reproducing Table 1 and Table 2 (Recommended Path)
 
-- Evaluate robustness across multiple random seeds
-- Analyze performance across different workload regimes
-- Investigate latency spike prediction
-- Explore uncertainty estimation for latency prediction
-- Evaluate larger Liquid Neural Networks
-- Explore hybrid recurrent-liquid architectures
+All five training scripts read data via a path relative to their own file location (`../benchmark`), so they work regardless of your current directory — **except** that each script saves its checkpoint under a bare filename (e.g. `cfc_baseline_best.pt`), and the `evaluate_*.py` scripts expect to find that checkpoint in `models/`. So: run training from inside `models/`.
+
+```bash
+mkdir -p models
+cd models
+
+python ../code/train_xgboost_baseline.py   # -> ../models/ (xgboost_baseline.json is bare-saved here too;
+                                            #    move/copy it to the repo root to match evaluate_xgboost.py, see note below)
+python ../code/train_lstm_baseline.py      # -> lstm_baseline_best.pt
+python ../code/train_gru_baseline.py       # -> gru_baseline_best.pt
+python ../code/train_ltc_baseline.py       # -> ltc_baseline_best.pt
+python ../code/train_cfc_baseline.py       # -> cfc_baseline_best.pt  (see caveat below)
+
+cd ..
+python code/evaluate_xgboost.py   # run from repo root: evaluate_xgboost.py loads "xgboost_baseline.json" from the cwd
+python code/evaluate_lstm.py
+python code/evaluate_gru.py
+python code/evaluate_ltc.py
+python code/evaluate_cfc.py
+```
+
+Each `train_*.py` script prints test-set MAE, RMSE, MAPE, R², and Pearson r (Table 1), and each `evaluate_*.py` script prints trainable parameter count and CPU inference latency per sample (Table 2).
+
+### Important caveat on CfC — please read before re-running
+
+`train_cfc_baseline.py` — the script that actually produced `cfc_baseline_best.pt` and the headline 17.84 ms / r=0.49 result — trains directly on **raw-millisecond** targets with plain `MSELoss` and `torch.manual_seed(0)`. LSTM, GRU, LTC, and XGBoost all train on the **log1p + standardized** target and convert back to ms for evaluation, using `torch.manual_seed(42)`, matching the report's Section V.A claim that all models were "optimized ... for the training objective of minimizing mean square error in log latency space." That claim is true for four of the five learned models, but not for the CfC script that generated the reported CfC numbers. See §7 for what to do about this before you submit.
+
+`train_cfc_v2.py` and `train_cfc_v4.py` are earlier ablations (different hidden size, LR scheduler, and — notably — they *do* train on the log-scaled target) kept in `code/` for transparency. They are not part of the reproduction path above and don't correspond to any number in the report.
+
+### A second gotcha: `construct_benchmark.py`'s hardcoded input path
+
+If you ever re-run `construct_benchmark.py` from scratch, note it reads from `backup_before_trim/dataset_with_deltat.jsonl`, not from `benchmark/dataset_with_deltat.jsonl` in the tree above. You'll need to `mkdir backup_before_trim && cp benchmark/dataset_with_deltat.jsonl backup_before_trim/` first, or the script will fail with `FileNotFoundError`. This only matters if you rebuild the benchmark from raw traces (§6); it does not affect the recommended path in this section.
 
 ---
 
-## Summary
+## 6. Full Pipeline From Raw Traces (Optional, Not Required for Grading)
 
-This benchmark demonstrates that Liquid Neural Networks are an effective approach for event-level latency prediction in microservice systems.
+For transparency, the full collection pipeline is:
 
-Among the evaluated models, **CfC** achieves the best overall performance, obtaining the **lowest MAE (17.84 ms)** and the **highest Pearson correlation (0.49)** while also being the **smallest neural network (16,540 trainable parameters)** and the **fastest neural architecture during inference (0.043458 ms/sample)**.
+```
+locust -f code/locustfile.py --host http://<train-ticket-host>:8080 --headless
+  → python code/collector.py --interval 30 --duration-hours 12 --output dataset.jsonl
+  → python code/compute_deltat.py            # dataset.jsonl -> dataset_with_deltat.jsonl
+  → python code/construct_benchmark.py       # -> windows_index.jsonl (see path caveat in §5)
+  → python code/split_windows.py             # -> windows_{train,val,test}.jsonl
+  → python code/extract_features.py          # -> X_*.npy, y_*.npy
+  → python code/scale_features.py            # -> X_*_scaled.npy
+  → python code/scale_targets_log.py         # -> y_*_scaled.npy, updates scaler_params.json
+```
 
-Although **LTC** is derived from the same continuous-time dynamics, its reliance on numerical ODE integration results in significantly higher inference latency (**4.38 ms/sample**) without improving predictive accuracy over CfC. This suggests that the closed-form approximation used by CfC retains the benefits of liquid dynamics while offering substantially better computational efficiency.
+This requires a live Train Ticket deployment (with Jaeger and Prometheus/cAdvisor exposed) and several hours of Locust traffic, and re-running it will **not** reproduce the benchmark bit-for-bit — request timing, latency, and system-metric values depend on live infrastructure load at collection time. `collector.py` also imports `docker_stats_collector.get_container_stats`, which is not included in this repository and must be supplied separately. This section is included for transparency about how the benchmark was built, not as a required or practically reproducible step — use the frozen dataset in §4 for actual reproduction.
 
-Overall, the results indicate that **CfC provides the strongest balance between accuracy, correlation, model complexity, and inference speed**, making it the most effective neural architecture evaluated for this benchmark.
+---
+
+## 8. Models Evaluated
+
+| Category | Model |
+|---|---|
+| Baseline | Naive Mean |
+| Classical ML | XGBoost |
+| Recurrent Neural Network | LSTM |
+| Recurrent Neural Network | GRU |
+| Liquid Neural Network | Liquid Time-Constant (LTC) |
+| Liquid Neural Network | Closed-form Continuous-time (CfC) |
+
+## 9. Feature Set
+
+27 features per timestep, over a 49-step window:
+- Temporal: inter-arrival time (Δt), rolling latency statistics
+- Trace topology: trace depth, span count
+- Service identity: root service (one-hot), services involved (multi-hot)
+- System-level: CPU, memory, and network utilization per service
+
+## 10. Evaluation Protocol
+
+- Chronological train/val/test split (70/15/15) with a 50-window purge zone at each boundary to prevent leakage
+- Log-space target scaling (log1p + standardize) for XGBoost, LSTM, GRU, and LTC; see §5/§7 for the CfC caveat
+- Metrics: MAE, RMSE, MAPE, R², Pearson r — all reported in real milliseconds after inverse-transforming predictions
+
+---
+
+## Citation
+
+If you use this benchmark, please cite:
+
+> N. Vinoth, "Evaluating Liquid Neural Networks for Latency Prediction in Microservice Architectures," Internship Report, Indian Institute of Information Technology Kottayam, 2026.
