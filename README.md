@@ -2,8 +2,6 @@
 
 Event-level latency prediction benchmark for the Train Ticket microservices application, comparing a naive baseline, XGBoost, discrete-time recurrent networks (LSTM, GRU), and continuous-time Liquid Neural Networks (LTC, CfC).
 
-Accompanying report: `Evaluating Liquid Neural Networks for Latency Prediction in Microservice Architectures.pdf`
-
 ---
 
 ## 1. Overview
