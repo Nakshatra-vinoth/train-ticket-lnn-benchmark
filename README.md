@@ -119,7 +119,7 @@ python code/evaluate_cfc.py
 
 Each `train_*.py` script prints test-set MAE, RMSE, MAPE, R², and Pearson r (Table 1), and each `evaluate_*.py` script prints trainable parameter count and CPU inference latency per sample (Table 2).
 
-## 6. Full Pipeline From Raw Traces (Optional, Not Required for Grading)
+## 6. Full Pipeline From Raw Traces (Optional)
 
 For transparency, the full collection pipeline is:
 
