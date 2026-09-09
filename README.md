@@ -77,7 +77,7 @@ All neural models except CfC's training script are forced to `torch.device("cpu"
 
 The processed benchmark artifacts (frozen dataset, windows, and train/val/test `.npy` arrays) are too large for git and are provided separately via Google Drive:
 
-**Drive link: `<PASTE YOUR SHARED DRIVE LINK HERE>`**
+**Drive link: `[<PASTE YOUR SHARED DRIVE LINK HERE>](https://drive.google.com/drive/folders/1f_ZwlAr9vOFgPFIbXurUNZlManji0AMW?usp=sharing)`**
 
 Download every file shown there and place them in `benchmark/`, so it contains:
 
