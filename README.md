@@ -41,8 +41,8 @@ code/
   locustfile.py             # Multi-regime workload generator (6 phases: low_load, ramp_up, steady_state, bursty, congestion, recovery)
 
   train_xgboost_baseline.py train_lstm_baseline.py train_gru_baseline.py
-  train_ltc_baseline.py     train_cfc_baseline.py       # <- the FIVE scripts that produced Table 1/2 (see §5 for a caveat on CfC)
-  train_cfc_v2.py train_cfc_v4.py                        # Exploratory CfC ablations, NOT used for the reported numbers (see §5)
+  train_ltc_baseline.py     train_cfc_baseline.py       # <- the FIVE scripts that produced Table 1/2 
+  train_cfc_v2.py train_cfc_v4.py                        # Exploratory CfC ablations, NOT used for the reported numbers 
 
   evaluate_xgboost.py evaluate_lstm.py evaluate_gru.py
   evaluate_ltc.py evaluate_cfc.py                         # Reload the saved checkpoints, report params + CPU inference latency (Table 2)
@@ -109,7 +109,7 @@ python ../code/train_xgboost_baseline.py   # -> ../models/ (xgboost_baseline.jso
 python ../code/train_lstm_baseline.py      # -> lstm_baseline_best.pt
 python ../code/train_gru_baseline.py       # -> gru_baseline_best.pt
 python ../code/train_ltc_baseline.py       # -> ltc_baseline_best.pt
-python ../code/train_cfc_baseline.py       # -> cfc_baseline_best.pt  (see caveat below)
+python ../code/train_cfc_baseline.py       # -> cfc_baseline_best.pt  
 
 cd ..
 python code/evaluate_xgboost.py   # run from repo root: evaluate_xgboost.py loads "xgboost_baseline.json" from the cwd
@@ -162,5 +162,5 @@ This requires a live Train Ticket deployment (with Jaeger and Prometheus/cAdviso
 ## 10. Evaluation Protocol
 
 - Chronological train/val/test split (70/15/15) with a 50-window purge zone at each boundary to prevent leakage
-- Log-space target scaling (log1p + standardize) for XGBoost, LSTM, GRU, and LTC; see §5/§7 for the CfC caveat
+- Log-space target scaling (log1p + standardize) for all five learned models; see §4 for the frozen scaled targets
 - Metrics: MAE, RMSE, MAPE, R², Pearson r — all reported in real milliseconds after inverse-transforming predictions
