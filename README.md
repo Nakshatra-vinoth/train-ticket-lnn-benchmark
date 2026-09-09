@@ -121,18 +121,6 @@ python code/evaluate_cfc.py
 
 Each `train_*.py` script prints test-set MAE, RMSE, MAPE, R², and Pearson r (Table 1), and each `evaluate_*.py` script prints trainable parameter count and CPU inference latency per sample (Table 2).
 
-### Important caveat on CfC — please read before re-running
-
-`train_cfc_baseline.py` — the script that actually produced `cfc_baseline_best.pt` and the headline 17.84 ms / r=0.49 result — trains directly on **raw-millisecond** targets with plain `MSELoss` and `torch.manual_seed(0)`. LSTM, GRU, LTC, and XGBoost all train on the **log1p + standardized** target and convert back to ms for evaluation, using `torch.manual_seed(42)`, matching the report's Section V.A claim that all models were "optimized ... for the training objective of minimizing mean square error in log latency space." That claim is true for four of the five learned models, but not for the CfC script that generated the reported CfC numbers. See §7 for what to do about this before you submit.
-
-`train_cfc_v2.py` and `train_cfc_v4.py` are earlier ablations (different hidden size, LR scheduler, and — notably — they *do* train on the log-scaled target) kept in `code/` for transparency. They are not part of the reproduction path above and don't correspond to any number in the report.
-
-### A second gotcha: `construct_benchmark.py`'s hardcoded input path
-
-If you ever re-run `construct_benchmark.py` from scratch, note it reads from `backup_before_trim/dataset_with_deltat.jsonl`, not from `benchmark/dataset_with_deltat.jsonl` in the tree above. You'll need to `mkdir backup_before_trim && cp benchmark/dataset_with_deltat.jsonl backup_before_trim/` first, or the script will fail with `FileNotFoundError`. This only matters if you rebuild the benchmark from raw traces (§6); it does not affect the recommended path in this section.
-
----
-
 ## 6. Full Pipeline From Raw Traces (Optional, Not Required for Grading)
 
 For transparency, the full collection pipeline is:
@@ -176,11 +164,3 @@ This requires a live Train Ticket deployment (with Jaeger and Prometheus/cAdviso
 - Chronological train/val/test split (70/15/15) with a 50-window purge zone at each boundary to prevent leakage
 - Log-space target scaling (log1p + standardize) for XGBoost, LSTM, GRU, and LTC; see §5/§7 for the CfC caveat
 - Metrics: MAE, RMSE, MAPE, R², Pearson r — all reported in real milliseconds after inverse-transforming predictions
-
----
-
-## Citation
-
-If you use this benchmark, please cite:
-
-> N. Vinoth, "Evaluating Liquid Neural Networks for Latency Prediction in Microservice Architectures," Internship Report, Indian Institute of Information Technology Kottayam, 2026.
