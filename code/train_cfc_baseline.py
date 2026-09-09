@@ -1,144 +1,274 @@
-from pathlib import Path
-
-DATA_DIR = Path(__file__).resolve().parent.parent / "benchmark"
+import json
 import numpy as np
 import torch
 import torch.nn as nn
-import time, json
-import pandas as pd
+from torch.utils.data import TensorDataset, DataLoader
 from ncps.torch import CfC
-from ncps.wirings import AutoNCP
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from scipy.stats import pearsonr
 
-torch.manual_seed(0)
-np.random.seed(0)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
+torch.manual_seed(42)
+np.random.seed(42)
 
-# Load frozen benchmark artifacts
-X_train = np.load(DATA_DIR / "X_train_scaled.npy")   # (N, 49, 27)
-X_val   = np.load(DATA_DIR / "X_val_scaled.npy")
-X_test  = np.load(DATA_DIR / "X_test_scaled.npy")
-y_train = np.load(DATA_DIR / "y_train.npy")          # raw ms, same target as LSTM/GRU
-y_val   = np.load(DATA_DIR / "y_val.npy")
-y_test  = np.load(DATA_DIR / "y_test.npy")
+X_train = np.load("benchmark/X_train_scaled.npy")
+X_val = np.load("benchmark/X_val_scaled.npy")
+X_test = np.load("benchmark/X_test_scaled.npy")
+
+y_train = np.load("benchmark/y_train_scaled.npy")
+y_val = np.load("benchmark/y_val_scaled.npy")
+y_test = np.load("benchmark/y_test_scaled.npy")
+
+with open("benchmark/scaler_params.json") as f:
+    scaler = json.load(f)
+
+y_log_mean = scaler["y_log_mean"]
+y_log_std = scaler["y_log_std"]
 
 print(f"Train: {X_train.shape}, Val: {X_val.shape}, Test: {X_test.shape}")
 
-X_train_t = torch.tensor(X_train, dtype=torch.float32)
-X_val_t   = torch.tensor(X_val, dtype=torch.float32)
-X_test_t  = torch.tensor(X_test, dtype=torch.float32)
-y_train_t = torch.tensor(y_train, dtype=torch.float32).unsqueeze(-1)
-y_val_t   = torch.tensor(y_val, dtype=torch.float32).unsqueeze(-1)
-y_test_t  = torch.tensor(y_test, dtype=torch.float32).unsqueeze(-1)
+device = torch.device("cpu")
 
-INPUT_SIZE = X_train.shape[2]   # 27
-UNITS = 64
 
-wiring = AutoNCP(UNITS, 1)  # 1 output unit
-model = CfC(INPUT_SIZE, wiring, batch_first=True).to(device)
+def to_loader(X, y, batch_size=64, shuffle=False):
+    X_t = torch.tensor(X, dtype=torch.float32)
+    y_t = torch.tensor(y, dtype=torch.float32)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-loss_fn = nn.MSELoss()
+    return DataLoader(
+        TensorDataset(X_t, y_t),
+        batch_size=batch_size,
+        shuffle=shuffle
+    )
 
-BATCH_SIZE = 64
-EPOCHS = 50
-PATIENCE = 5
 
-train_ds = torch.utils.data.TensorDataset(X_train_t, y_train_t)
-train_loader = torch.utils.data.DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
+train_loader = to_loader(X_train, y_train, shuffle=True)
+val_loader = to_loader(X_val, y_val, shuffle=False)
+test_loader = to_loader(X_test, y_test, shuffle=False)
 
+
+class CfCBaseline(nn.Module):
+    def __init__(self, input_dim, hidden_dim=32):
+        super().__init__()
+
+        self.cfc = CfC(
+            input_dim,
+            hidden_dim,
+            batch_first=True
+        )
+
+        self.head = nn.Sequential(
+            nn.Linear(hidden_dim, 16),
+            nn.ReLU(),
+            nn.Linear(16, 1)
+        )
+
+    def forward(self, x):
+        out, h_n = self.cfc(x)
+        last_hidden = out[:, -1, :]
+        return self.head(last_hidden).squeeze(-1)
+
+
+model = CfCBaseline(
+    input_dim=X_train.shape[2],
+    hidden_dim=32
+).to(device)
+
+optimizer = torch.optim.Adam(
+    model.parameters(),
+    lr=1e-3
+)
+
+criterion = nn.MSELoss()
+
+EPOCHS = 30
 best_val_loss = float("inf")
-best_epoch = 0
+patience = 5
 patience_counter = 0
-history = []
 
-start_time = time.time()
 
 for epoch in range(1, EPOCHS + 1):
+
     model.train()
     train_losses = []
+
     for xb, yb in train_loader:
-        xb, yb = xb.to(device), yb.to(device)
+
+        xb = xb.to(device)
+        yb = yb.to(device)
+
         optimizer.zero_grad()
-        out, _ = model(xb)
-        pred = out[:, -1, :]  # last timestep output
-        loss = loss_fn(pred, yb)
+
+        pred = model(xb)
+
+        loss = criterion(pred, yb)
+
         loss.backward()
         optimizer.step()
+
         train_losses.append(loss.item())
 
     model.eval()
+    val_losses = []
+
     with torch.no_grad():
-        val_out, _ = model(X_val_t.to(device))
-        val_pred = val_out[:, -1, :]
-        val_loss = loss_fn(val_pred, y_val_t.to(device)).item()
+
+        for xb, yb in val_loader:
+
+            xb = xb.to(device)
+            yb = yb.to(device)
+
+            pred = model(xb)
+
+            val_losses.append(
+                criterion(pred, yb).item()
+            )
 
     train_loss = np.mean(train_losses)
-    history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
-    print(f"Epoch {epoch}: train_loss={train_loss:.4f} val_loss={val_loss:.4f}")
+    val_loss = np.mean(val_losses)
+
+    print(
+        f"Epoch {epoch:2d}: "
+        f"train_loss={train_loss:.4f}  "
+        f"val_loss={val_loss:.4f}",
+        flush=True
+    )
 
     if val_loss < best_val_loss:
+
         best_val_loss = val_loss
-        best_epoch = epoch
         patience_counter = 0
-        torch.save(model.state_dict(), "cfc_baseline_best.pt")
+
+        torch.save(
+            model.state_dict(),
+            "cfc_v4_best.pt"
+        )
+
     else:
+
         patience_counter += 1
-        if patience_counter >= PATIENCE:
-            print(f"Early stopping at epoch {epoch}")
+
+        if patience_counter >= patience:
+
+            print(
+                f"Early stopping at epoch {epoch} "
+                f"(no improvement for {patience} epochs)"
+            )
+
             break
 
-total_time = time.time() - start_time
 
-# Reload best checkpoint
-model.load_state_dict(torch.load("cfc_baseline_best.pt"))
+model.load_state_dict(
+    torch.load("cfc_v4_best.pt")
+)
+
 model.eval()
 
+all_preds = []
+all_targets = []
+
 with torch.no_grad():
-    test_out, _ = model(X_test_t.to(device))
-    test_pred = test_out[:, -1, :].cpu().numpy().flatten()
 
-y_test_np = y_test
+    for xb, yb in test_loader:
 
-mae = mean_absolute_error(y_test_np, test_pred)
-rmse = np.sqrt(mean_squared_error(y_test_np, test_pred))
-mape = np.mean(np.abs((y_test_np - test_pred) / np.clip(y_test_np, 1e-3, None))) * 100
-r2 = r2_score(y_test_np, test_pred)
-pearson_r, _ = pearsonr(test_pred, y_test_np)
-naive_mae = np.mean(np.abs(y_test_np - np.median(y_train)))
+        pred = model(xb.to(device))
 
-print(f"\nCfC Test Metrics:")
-print(f"  MAE:     {mae:.2f} ms")
-print(f"  RMSE:    {rmse:.2f} ms")
-print(f"  MAPE:    {mape:.2f}%")
-print(f"  R2:      {r2:.4f}")
-print(f"  Pearson: {pearson_r:.4f}")
-print(f"  Naive MAE: {naive_mae:.2f} ms")
-print(f"  Best val loss: {best_val_loss:.4f} at epoch {best_epoch}")
-print(f"  Total training time: {total_time:.2f}s")
+        all_preds.append(
+            pred.cpu().numpy()
+        )
 
-# Save history CSV
-pd.DataFrame(history).to_csv("cfc_training_history.csv", index=False)
+        all_targets.append(
+            yb.numpy()
+        )
 
-# Save summary
-with open("cfc_training_summary.md", "w") as f:
-    f.write(f"# CfC Training Summary\n\n")
-    f.write(f"- Best validation loss: {best_val_loss:.4f}\n")
-    f.write(f"- Best validation epoch: {best_epoch}\n")
-    f.write(f"- Early stopping epoch: {len(history)}\n")
-    f.write(f"- Total training time: {total_time:.2f} seconds\n\n")
-    f.write(f"## Test Metrics\n\n")
-    f.write(f"- MAE: {mae:.2f} ms\n")
-    f.write(f"- RMSE: {rmse:.2f} ms\n")
-    f.write(f"- MAPE: {mape:.2f}%\n")
-    f.write(f"- R2: {r2:.4f}\n")
-    f.write(f"- Pearson: {pearson_r:.4f}\n")
-    f.write(f"- Naive MAE: {naive_mae:.2f} ms\n")
 
-np.save("cfc_test_preds_ms.npy", test_pred)
-np.save("cfc_test_targets_ms.npy", y_test_np)
+preds_scaled = np.concatenate(all_preds)
+targets_scaled = np.concatenate(all_targets)
 
-print("\nSaved: cfc_baseline_best.pt, cfc_training_history.csv, cfc_training_summary.md")
-print("Saved: cfc_test_preds_ms.npy, cfc_test_targets_ms.npy")
+
+preds_log = (
+    preds_scaled * y_log_std
+    + y_log_mean
+)
+
+targets_log = (
+    targets_scaled * y_log_std
+    + y_log_mean
+)
+
+
+preds_ms = np.expm1(preds_log)
+targets_ms = np.expm1(targets_log)
+
+
+mae = np.mean(
+    np.abs(preds_ms - targets_ms)
+)
+
+rmse = np.sqrt(
+    np.mean(
+        (preds_ms - targets_ms) ** 2
+    )
+)
+
+mape = np.mean(
+    np.abs(
+        (preds_ms - targets_ms)
+        / np.clip(targets_ms, 1e-3, None)
+    )
+) * 100
+
+pearson_corr = np.corrcoef(
+    preds_ms,
+    targets_ms
+)[0, 1]
+
+
+naive_mae = np.mean(
+    np.abs(
+        targets_ms
+        - np.expm1(y_log_mean)
+    )
+)
+
+
+print("\n=== Test set results (real ms) ===")
+
+print(
+    f"MAE:  {mae:.2f} ms"
+)
+
+print(
+    f"RMSE: {rmse:.2f} ms"
+)
+
+print(
+    f"MAPE: {mape:.2f}%"
+)
+
+print(
+    f"Pearson correlation: {pearson_corr:.4f}"
+)
+
+print(
+    f"\nNaive baseline MAE: "
+    f"{naive_mae:.2f} ms"
+)
+
+print(
+    f"CfC v4 (hidden_dim=32) MAE: "
+    f"{mae:.2f} ms"
+)
+
+print(
+    "  compare: v1 (hidden_dim=64)=17.84 ms"
+)
+
+
+np.save(
+    "cfc_v4_test_preds_ms.npy",
+    preds_ms
+)
+
+np.save(
+    "cfc_v4_test_targets_ms.npy",
+    targets_ms
+)
+
+print("\nSaved cfc_v4_best.pt")
