@@ -14,3 +14,5 @@ results/*.md
 
 *_test_preds_ms.npy
 *_test_targets_ms.npy
+
+train-ticket-lnn-benchmark-dataset.zip
